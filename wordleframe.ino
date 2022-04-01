@@ -21,7 +21,7 @@
 #define AUDIO_EN_GPIO   16
 
 // Score Rotate Delay
-#define SCORE_ROTATE_DELAY_MS        5000
+#define SCORE_ROTATE_DELAY_MS        15000
 
 // Time to give user to enter config mode at boot (0 to disable)
 #define STARTUP_CONFIG_DELAY_MS      1500
@@ -31,7 +31,7 @@
 #define AIO_SERVERPORT               8883
 
 // Neopixel grid settings
-#define NEOPIXEL_PIN                 1
+#define NEOPIXEL_PIN                 10
 #define NEOPIXEL_NOT_ENABLE_PIN      21
 
 // E-ink settings
@@ -73,6 +73,9 @@ static const char *ssl_cert PROGMEM = \
 #define ARRAY_SIZE(a)                               \
   ((sizeof(a) / sizeof(*(a))) /                     \
   static_cast<size_t>(!(sizeof(a) % sizeof(*(a)))))
+
+typedef enum disp_state {NORMAL, SHOW_SETUP, SHOW_WIFI, SHOW_MQTT} disp_state;
+disp_state g_state = SHOW_SETUP;
 
 // Config data stored in EEPROM
 Config config;
@@ -120,20 +123,26 @@ void setup(void)
 
   Serial.begin(115200);
 
-  if ( config.begin() != true && STARTUP_CONFIG_DELAY_MS) {
-    Serial.println("");
-    Serial.print("Press any key to force reconfig");
-    begintime = millis();
-    while (!Serial.available()) {
-      if (((millis() - begintime) >= STARTUP_CONFIG_DELAY_MS)) {
-        break;
+  if (!config.begin()) {
+    UpdateDisplayState(SHOW_SETUP);
+    config.reconfig();
+  } else {
+    if (STARTUP_CONFIG_DELAY_MS) {
+      Serial.println("");
+      Serial.print("Press any key to force reconfig");
+      begintime = millis();
+      while (!Serial.available()) {
+        if (((millis() - begintime) >= STARTUP_CONFIG_DELAY_MS)) {
+          break;
+        }
+        Serial.print(".");
+        delay(80);
       }
-      Serial.print(".");
-      delay(80);
-    }
-    Serial.println("");
-    if (Serial.available()){
-      config.reconfig();
+      Serial.println("");
+      if (Serial.available()){
+        UpdateDisplayState(SHOW_SETUP);
+        config.reconfig();
+      }
     }
   }
 
@@ -155,29 +164,36 @@ void loop(void)
   bool wifi_up = wifi.isConnected();
 
   if (!wifi_up) {
-    UpdateDisplay("Connecting to wifi...");
+    g_state = SHOW_WIFI;
+    wifi.disconnect();
     Serial.println("Wifi is down; try to bring it up:");
     if (wifi.connectWifi(config.ssid(), config.pass())) {
       client.setCACert(ssl_cert);
       wifi_up = true;
+      g_state = SHOW_MQTT;
       Alarm.alarmRepeat(0,0,0, ResetBoard);  // 12:00am every day
-      UpdateDisplay("Waiting for a Wordle");
       Serial.println("Wifi is up");
     }
   }
 
   if (wifi_up && MQTT_connect()) {
+    g_state = NORMAL;
     mqtt.processPackets(100);
     // ping the server to keep the mqtt connection alive
     if(! mqtt.ping()) {
+      Serial.println("MQTT is down");
       mqtt.disconnect();
+      g_state = SHOW_WIFI;
     }
   } else {
-    wifi.disconnect();
+    Serial.printf("Unable to connect to MQTT (wifi: %d)\r\n", wifi_up);
   }
 
+  UpdateDisplayState(g_state);
+
   new_record = records.isNewRecordAvail();
-  if (new_record || ((millis() - last_score_time) >= SCORE_ROTATE_DELAY_MS))
+  if (new_record ||
+      (((millis() - last_score_time) >= SCORE_ROTATE_DELAY_MS) && records.shouldRefresh()))
   {
     record current = records.get();
     if (current.score)
@@ -187,21 +203,40 @@ void loop(void)
       if (new_record)
       {
         digitalWrite(AUDIO_EN_GPIO, HIGH);
-//Serial.println("Enabled Audio GPIO");
-//        delay(1000);
         records.printRecord(current);
-Serial.println("Playing notice");
         Play(NOTICE_DATA, NOTICE_LEN, NOTICE_HZ, NOTICE_PCM_PIN, false);
       }
       leds.show(current.results, current.score, true); // Update the LEDs
       /* Sound should be done playing by now */
       if (new_record)
       {
-Serial.println("Disable audio");
         digitalWrite(AUDIO_EN_GPIO, LOW);
       }
     }
     last_score_time = millis();
+  }
+}
+
+void UpdateDisplayState(disp_state state)
+{
+  static disp_state old_state = NORMAL;
+
+  if (state != old_state)
+  {
+    switch(state) {
+      case SHOW_SETUP:
+        UpdateDisplay("Setup required");
+        break;
+      case SHOW_WIFI:
+        UpdateDisplay("Connecting to wifi...");
+        break;
+      case SHOW_MQTT:
+        UpdateDisplay("Connecting to backend...");
+        break;
+      default:
+        // fallthrough and let regular display update happen
+        break;
+    }
   }
 }
 

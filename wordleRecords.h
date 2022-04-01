@@ -26,6 +26,7 @@ class WordleRecords
     bool add(record r);        // Add a record
     void reset();              // Reset the list to empty
     bool isNewRecordAvail();   // new record since last call?
+    bool shouldRefresh();      // Is it worth refreshing (are there multiple records?)
     record get();              // returns the next record that should be shown
     void printRecord(record r);
   private:

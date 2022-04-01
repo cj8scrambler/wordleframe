@@ -138,9 +138,15 @@ void WordleRecords::reset()
 
 bool WordleRecords::isNewRecordAvail()
 {
-    bool ret = new_record_avail;
-    new_record_avail = false;
-    return ret;
+  bool ret = new_record_avail;
+  new_record_avail = false;
+  return ret;
+}
+
+/* Should refresh if there are multiple records available */
+bool WordleRecords::shouldRefresh()
+{
+  return (num_records > 1);
 }
 
 record WordleRecords::get()

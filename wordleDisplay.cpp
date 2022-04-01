@@ -1,5 +1,7 @@
 #include "wordleDisplay.h"
 
+#define BRIGHTNESS  64  // 1-255
+
 WordleDisplay::WordleDisplay(int pin)
 {
   pixels = new Adafruit_NeoPixel(GUESSES*WORD_LEN, pin, NEO_GRB);
@@ -30,7 +32,7 @@ bool WordleDisplay::show(state results[GUESSES][WORD_LEN], uint8_t score, bool a
       if (animate)
       {
         int b;
-        for (b = 0; b < 255; b += 8)
+        for (b = 0; b < BRIGHTNESS; b += 8)
         {
           color = state_to_color(results[r][c], b);
           pixels->setPixelColor(i, color);
@@ -39,7 +41,7 @@ bool WordleDisplay::show(state results[GUESSES][WORD_LEN], uint8_t score, bool a
         }
         delay(20); // letter delay
       } else {
-        color = state_to_color(results[r][c], 255);
+        color = state_to_color(results[r][c], BRIGHTNESS);
         pixels->setPixelColor(i, color);
       }
     }

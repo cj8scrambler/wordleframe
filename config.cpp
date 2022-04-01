@@ -3,7 +3,7 @@
 #include "config.h"
 
 // increment to force reconfig in case of EEPROM data layout change
-#define EEPROM_VERSION            0x0101
+#define EEPROM_VERSION            0x0102
 
 #define MAX_LINE_SIZE             80
 #define BLANK_EEPROM_BYTE         0xff
@@ -13,7 +13,8 @@ Config::Config(void)
 }
 
 // Reads config data from EEPROM.
-// Returns true if manual reconfig was forced.
+// Returns true if valid config loaded
+// Returns false if a manual reconfig is needed
 bool Config::begin(void)
 {
   EEPROM.begin(sizeof(struct config_data));
@@ -58,13 +59,10 @@ bool Config::begin(void)
       (config->adafruit_feed[0] == '\0') ||
       (config->version != EEPROM_VERSION) )
   {
-    delay(2000);  // Take some time for uart to initialize at startup
-    Serial.println("");
-    Serial.println("Forcing RECONFIG based on missing data");
-    reconfig();
-    return true;
+    Serial.println("Configuration invalid");
+    return false;
   }
-  return false;
+  return true;
 }
 
 #ifdef DEBUG
