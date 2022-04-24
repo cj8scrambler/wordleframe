@@ -175,7 +175,7 @@ void WordleRecords::printRecord(record result)
   Serial.printf("Score: %d\r\n", result.score);
   Serial.printf("Hard: %d\r\n", result.hard);
   Serial.println("Results:");
-  for(i=0; i<result.score; i++) {
+  for(i=0; i<MIN(result.score,6); i++) {
     for(j=0; j<WORD_LEN; j++) {
       Serial.printf(" %c ", state_to_char(result.results[i][j]));
     }
@@ -247,7 +247,7 @@ record WordleRecords::parseBody(char *data, int len)
   // Parse: 'Wordle 222 5/6*'
   /* Just compile once */
   if (!regexCompiled.re_magic) {
-    if (regcomp(&regexCompiled, "Wordle[ ]+([0-9]+)[ ]+([0-9])/([0-9])(.)", REG_EXTENDED))
+    if (regcomp(&regexCompiled, "Wordle[ ]+([0-9]+)[ ]+([0-9xX)/([0-9])(.)", REG_EXTENDED))
     {
       Serial.print("Unable to compile regex");
       return result;
@@ -290,7 +290,12 @@ record WordleRecords::parseBody(char *data, int len)
     {
       i = MAX(i, groups[2].rm_eo);
       data[groups[2].rm_eo] = '\0';
-      result.score = atoi(&(data[groups[2].rm_so]));
+      if ((data[groups[2].rm_so] == 'X') || (data[groups[2].rm_so] == 'x'))
+      {
+        result.score = 255;
+      } else {
+        result.score = atoi(&(data[groups[2].rm_so]));
+      }
       //Serial.printf("parsed score (%s) as: %d\r\n", &(data[groups[2].rm_so]), result.score);
     }
 

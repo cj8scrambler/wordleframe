@@ -1,6 +1,9 @@
 #include "wordleDisplay.h"
 
 #define BRIGHTNESS  64  // 1-255
+#define MIN(X, Y) (((X) < (Y)) ? (X) : (Y))
+#define MAX(X, Y) (((X) > (Y)) ? (X) : (Y))
+
 
 WordleDisplay::WordleDisplay(int pin)
 {
@@ -23,7 +26,7 @@ bool WordleDisplay::show(state results[GUESSES][WORD_LEN], uint8_t score, bool a
     pixels->show();
   }
 
-  for (r = 0; r < score; r++)
+  for (r = 0; r < MIN(score, 6); r++)
   {
     for (c = 0; c < WORD_LEN; c++)
     {

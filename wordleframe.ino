@@ -269,8 +269,13 @@ void UpdateDisplay(record r)
   user_x = (DISPLAY_W - w) / 2;
 
   // Figure out center point of Wordle string
-  snprintf(buf, 80, "Wordle %d %d/%d%c", r.gameno,
-           r.score, GUESSES, r.hard?'*':'\0');
+  if (r.score <= 6) {
+    snprintf(buf, 80, "Wordle %d %d/%d%c", r.gameno,
+             r.score, GUESSES, r.hard?'*':'\0');
+  } else {
+    snprintf(buf, 80, "Wordle %d X/%d%c", r.gameno,
+             GUESSES, r.hard?'*':'\0');
+  }
   display.setFont(&FreeSansBold18pt7b);
   display.getTextBounds(buf, 0, 0, &x1, &y1, &w, &h);
   wordle_x = (DISPLAY_W - w) / 2;
