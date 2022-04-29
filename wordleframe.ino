@@ -12,6 +12,19 @@
 #include "config.h"
 #include "network.h"
 
+// UTC offset in hours.  This is used to reset the display at midnight local time.
+// Daylight savings time will mess with this.  If it's set to the standard time
+// offset, then the display will reset at 1:00am durring DST and midnight durring
+// standard time
+#define UTC_OFFSET      (-6)   // CST is UTC-6
+#define RESET_HOUR_UTC  (UTC_OFFSET>0?(24-UTC_OFFSET):(0-UTC_OFFSET))
+
+// Score Rotate Delay
+#define SCORE_ROTATE_DELAY_MS        15000
+
+// Time to give user to enter config mode at boot (0 to disable)
+#define STARTUP_CONFIG_DELAY_MS      1500
+
 // Audio sample data
 #include "WordleNotice2.h"
 #define NOTICE_DATA     WordleNotice2
@@ -19,12 +32,6 @@
 #define NOTICE_HZ       9000
 #define NOTICE_PCM_PIN  17
 #define AUDIO_EN_GPIO   16
-
-// Score Rotate Delay
-#define SCORE_ROTATE_DELAY_MS        15000
-
-// Time to give user to enter config mode at boot (0 to disable)
-#define STARTUP_CONFIG_DELAY_MS      1500
 
 // Adafruit.io settings
 #define AIO_SERVER                   "io.adafruit.com"
@@ -35,11 +42,11 @@
 #define NEOPIXEL_NOT_ENABLE_PIN      21
 
 // E-ink settings
-#define EPD_DC      7  // can be any pin, but required!
-#define EPD_CS      8  // can be any pin, but required!
-#define EPD_BUSY    5  // can set to -1 to not use a pin (will wait a fixed delay)
+#define EPD_DC      7
+#define EPD_CS      8
+#define EPD_BUSY    5
 #define SRAM_CS     -1 // can set to -1 to not use a pin (uses a lot of RAM!)
-#define EPD_RESET   6  // can set to -1 and share with chip Reset (can't deep sleep)
+#define EPD_RESET   6
 #define DISPLAY_W   296
 #define DISPLAY_H   128
 
@@ -165,28 +172,30 @@ void loop(void)
 
   if (!wifi_up) {
     g_state = SHOW_WIFI;
+    UpdateDisplayState(g_state);
     wifi.disconnect();
     Serial.println("Wifi is down; try to bring it up:");
     if (wifi.connectWifi(config.ssid(), config.pass())) {
       client.setCACert(ssl_cert);
       wifi_up = true;
       g_state = SHOW_MQTT;
-      Alarm.alarmRepeat(0,0,0, ResetBoard);  // 12:00am every day
+      UpdateDisplayState(g_state);
       Serial.println("Wifi is up");
+
+      // Schedule daily reset
+      Alarm.alarmRepeat(RESET_HOUR_UTC, 0, 0, ResetBoard);
+      Serial.printf("Scheduled reset for %d:00 UTC\r\n", RESET_HOUR_UTC);
     }
   }
 
   if (wifi_up && MQTT_connect()) {
     g_state = NORMAL;
     mqtt.processPackets(100);
-    // ping the server to keep the mqtt connection alive
-    if(! mqtt.ping()) {
-      Serial.println("MQTT is down");
-      mqtt.disconnect();
-      g_state = SHOW_WIFI;
-    }
   } else {
-    Serial.printf("Unable to connect to MQTT (wifi: %d)\r\n", wifi_up);
+      Serial.printf("Unable to connect to MQTT; Reset the nework\r\n", wifi_up);
+      mqtt.disconnect();
+      wifi.disconnect();
+      g_state = SHOW_WIFI;
   }
 
   UpdateDisplayState(g_state);
@@ -215,6 +224,8 @@ void loop(void)
     }
     last_score_time = millis();
   }
+
+  Alarm.delay(500);
 }
 
 void UpdateDisplayState(disp_state state)
@@ -225,18 +236,23 @@ void UpdateDisplayState(disp_state state)
   {
     switch(state) {
       case SHOW_SETUP:
+        Serial.printf("Update display from %d to %d (Setup Required)\r\n", old_state, state);
         UpdateDisplay("Setup required");
         break;
       case SHOW_WIFI:
+        Serial.printf("Update display from %d to %d (Connecting to wifi...)\r\n", old_state, state);
         UpdateDisplay("Connecting to wifi...");
         break;
       case SHOW_MQTT:
+        Serial.printf("Update display from %d to %d (Connecting to backend...)\r\n", old_state, state);
         UpdateDisplay("Connecting to backend...");
         break;
       default:
-        // fallthrough and let regular display update happen
+        Serial.printf("Update display from %d to %d ([empty])\r\n", old_state, state);
+        UpdateDisplay("");
         break;
     }
+    old_state = state;
   }
 }
 
@@ -296,8 +312,11 @@ void UpdateDisplay(record r)
 }
 
 void ResetBoard(void) {
-  Serial.println("Midnight: reset board");
+  Serial.printf("Reset board at %ld ~(%d:%02d:%02d local)\r\n",
+                now(), hour()+UTC_OFFSET, minute(), second());
   records.reset();
+  leds.clear();
+  UpdateDisplay("");
 }
 
 // Function to connect and reconnect as necessary to the MQTT server.
@@ -307,7 +326,8 @@ bool MQTT_connect() {
 
   // Stop if already connected.
   if (mqtt.connected()) {
-    return true;
+    // ping the server to keep the mqtt connection alive
+    return mqtt.ping();
   }
 
   Serial.print("Connecting to MQTT... ");

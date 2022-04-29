@@ -1,4 +1,5 @@
 #include <time.h>
+#include <TimeLib.h>
 #include "network.h"
 
 #define WIFI_WAIT_SEC                   15    // Wait time for wifi
@@ -36,7 +37,6 @@ bool Network::connectWifi(const char *ssid, const char *pass)
 
     WiFi.mode(WIFI_STA);
     WiFi.begin(ssid, pass);
-    _init = true;
     delay(500);
     while ((attempts++ < (WIFI_WAIT_SEC * 2)) && (WiFi.status() != WL_CONNECTED))
     {
@@ -80,10 +80,12 @@ bool Network::connectWifi(const char *ssid, const char *pass)
         return false;
     }
 
+    setTime(epochTime);
+
 #ifdef DEBUG
     Serial.printf("Time found: %d\r\n", epochTime);
 #endif
-
+    _init = true;
     return true;
 }
 
